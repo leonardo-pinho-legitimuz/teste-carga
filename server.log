@@ -1,5 +1,6 @@
-[2023-12-01] INFO: Development environment started
-[2023-12-01] INFO: Listening on localhost:3000
-[2023-12-01] DEBUG: Development config loaded
-[2023-12-01] INFO: Connected to development database
-[2023-12-01] INFO: Ready for development work
+[2023-12-10] INFO: Development environment started with debugging
+[2023-12-10] INFO: Listening on 0.0.0.0:4000
+[2023-12-10] DEBUG: Development config loaded with debugging enabled
+[2023-12-10] INFO: Connected to development database
+[2023-12-10] INFO: Debug queries enabled
+[2023-12-10] INFO: Ready for development work with extended features
