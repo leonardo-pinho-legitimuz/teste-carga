@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Configuration File for Development (Updated)
 server:
   port: 4000
@@ -10,3 +11,19 @@ database:
   password: secure_develop_pass
   max_connections: 50
   debug_queries: true
+=======
+# Configuration File for Canary
+server:
+  port: 8080
+  host: 0.0.0.0
+  timeout: 3000
+  max_connections: 100
+database:
+  host: canary-db.example.com
+  user: canary_user
+  password: canary_password456
+  pool_size: 25
+cache:
+  enabled: true
+  ttl: 3600
+>>>>>>> origin/canary
