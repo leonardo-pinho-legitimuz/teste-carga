@@ -1,5 +1,6 @@
-[2023-12-01] INFO: Development environment started
-[2023-12-01] INFO: Listening on localhost:3000
-[2023-12-01] DEBUG: Development config loaded
-[2023-12-01] INFO: Connected to development database
-[2023-12-01] INFO: Ready for development work
+[2023-12-15] INFO: Canary environment started
+[2023-12-15] INFO: Listening on 0.0.0.0:8080
+[2023-12-15] INFO: Production-like config loaded for canary
+[2023-12-15] INFO: Connected to canary database
+[2023-12-15] INFO: Cache initialized for performance
+[2023-12-15] INFO: Ready for canary testing
