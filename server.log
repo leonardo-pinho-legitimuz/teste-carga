@@ -1,6 +1,15 @@
+<<<<<<< HEAD
 [2023-12-10] INFO: Development environment started with debugging
 [2023-12-10] INFO: Listening on 0.0.0.0:4000
 [2023-12-10] DEBUG: Development config loaded with debugging enabled
 [2023-12-10] INFO: Connected to development database
 [2023-12-10] INFO: Debug queries enabled
 [2023-12-10] INFO: Ready for development work with extended features
+=======
+[2023-12-15] INFO: Canary environment started
+[2023-12-15] INFO: Listening on 0.0.0.0:8080
+[2023-12-15] INFO: Production-like config loaded for canary
+[2023-12-15] INFO: Connected to canary database
+[2023-12-15] INFO: Cache initialized for performance
+[2023-12-15] INFO: Ready for canary testing
+>>>>>>> origin/canary
