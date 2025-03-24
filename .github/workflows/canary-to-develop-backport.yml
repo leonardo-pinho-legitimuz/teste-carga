@@ -33,10 +33,8 @@ jobs:
         run: |
           # Get the latest commit message from canary
           COMMIT_MSG=$(git log -1 --pretty=%B)
-
           # Switch to target branch
           git checkout develop
-
           # Try to merge from canary
           if git merge origin/canary -m "Backport from canary: $COMMIT_MSG"; then
             echo "Backported successfully from canary to develop"
@@ -48,8 +46,8 @@ jobs:
             git add .
             git commit --no-edit --allow-empty
             CONFLICT_BRANCH="canary-to-develop-$(date +%s)"
-            git checkout -b $CONFLICT_BRANCH
-            git push origin $CONFLICT_BRANCH
+            git checkout -b "$CONFLICT_BRANCH"
+            git push origin "$CONFLICT_BRANCH"
             echo "status=conflict" >> $GITHUB_OUTPUT
             echo "branch=$CONFLICT_BRANCH" >> $GITHUB_OUTPUT
           fi
@@ -59,176 +57,142 @@ jobs:
         id: find-contributors
         run: |
           # Get the conflicting files
-          git checkout ${{ steps.backport-develop.outputs.branch }}
+          git checkout "${{ steps.backport-develop.outputs.branch }}"
           CONFLICT_FILES=$(git diff --name-only --diff-filter=U origin/develop)
-
+          
           if [ -n "$CONFLICT_FILES" ]; then
             echo "Conflict files: $CONFLICT_FILES"
-
-            # Initialize contributors tracking
+            
+            # Initialize associative arrays
             declare -A CONTRIBUTORS_SCORE
             declare -A CONTRIBUTORS_EMAIL
             declare -A CONTRIBUTORS_TYPE
             declare -A CONTRIBUTORS_BRANCHES
             CONTRIBUTORS_INFO=""
-
+            
             # For each conflicting file, extract conflict blocks and identify responsible authors
             for FILE in $CONFLICT_FILES; do
               echo "Analyzing conflicts in $FILE"
-
+              
               # Create a temporary file to store the conflicted content
               TEMP_FILE=$(mktemp)
-              git show :$FILE > $TEMP_FILE
-
+              git show :"$FILE" > "$TEMP_FILE"
+              
               # Extract conflict markers and line numbers
-              CONFLICT_MARKERS=$(grep -n -A1 -B1 "^<<<<<<< HEAD" $TEMP_FILE || echo "")
-
+              CONFLICT_MARKERS=$(grep -n -A1 -B1 "^<<<<<<< HEAD" "$TEMP_FILE" || echo "")
+              
               if [ -n "$CONFLICT_MARKERS" ]; then
                 echo "Found conflict markers in $FILE"
-
-                # Initialize branch tracking if not already done
-                declare -A CONTRIBUTORS_BRANCHES
-
+                
                 # Process each conflict block
                 while IFS= read -r LINE; do
                   if [[ $LINE =~ ^([0-9]+)[-:].*\<\<\<\<\<\<\< ]]; then
                     # Found start of conflict
                     START_LINE="${BASH_REMATCH[1]}"
-
+                    
                     # Find the middle separator
-                    MIDDLE_LINE=$(grep -n "^=======" $TEMP_FILE | grep -A1 "$START_LINE" | head -1 || echo "")
+                    MIDDLE_LINE=$(grep -n "^=======" "$TEMP_FILE" | grep -A1 "$START_LINE" | head -1 || echo "")
                     if [[ $MIDDLE_LINE =~ ^([0-9]+)[-:] ]]; then
                       MIDDLE_LINE_NUM="${BASH_REMATCH[1]}"
-
+                      
                       # Find the end of conflict
-                      END_LINE=$(grep -n "^>>>>>>>" $TEMP_FILE | grep -A1 "$MIDDLE_LINE_NUM" | head -1 || echo "")
+                      END_LINE=$(grep -n "^>>>>>>>" "$TEMP_FILE" | grep -A1 "$MIDDLE_LINE_NUM" | head -1 || echo "")
                       if [[ $END_LINE =~ ^([0-9]+)[-:] ]]; then
                         END_LINE_NUM="${BASH_REMATCH[1]}"
-
+                        
                         echo "Conflict block in $FILE: lines $START_LINE-$END_LINE_NUM"
-
-                        # Extract actual conflicting content from the file (for better analysis)
-                        DEVELOP_CONTENT=$(sed -n "$((START_LINE + 1)),$((MIDDLE_LINE_NUM - 1))p" $TEMP_FILE)
-                        CANARY_CONTENT=$(sed -n "$((MIDDLE_LINE_NUM + 1)),$((END_LINE_NUM - 1))p" $TEMP_FILE)
-
-                        # Find exact authors of conflicting lines in develop branch
+                        
+                        # Extract actual conflicting content
+                        DEVELOP_CONTENT=$(sed -n "$((START_LINE + 1)),$((MIDDLE_LINE_NUM - 1))p" "$TEMP_FILE")
+                        CANARY_CONTENT=$(sed -n "$((MIDDLE_LINE_NUM + 1)),$((END_LINE_NUM - 1))p" "$TEMP_FILE")
+                        
+                        # Find authors of conflicting lines in develop branch
                         echo "Finding authors of conflicting lines in develop branch"
                         git checkout develop > /dev/null 2>&1
-
-                        # Process each line separately to get the exact last editor of each line
+                        
+                        # Process develop branch lines
                         for ((i=START_LINE+1; i<MIDDLE_LINE_NUM; i++)); do
-                          LINE_AUTHOR=$(git blame -L $i,$i --porcelain -- "$FILE" 2>/dev/null | grep "^author " | head -1 | sed 's/^author //')
-                          LINE_EMAIL=$(git blame -L $i,$i --porcelain -- "$FILE" 2>/dev/null | grep "^author-mail " | head -1 | sed 's/^author-mail //' | sed 's/[<>]//g')
-
+                          LINE_AUTHOR=$(git blame -L "$i","$i" --porcelain -- "$FILE" 2>/dev/null | grep "^author " | head -1 | sed 's/^author //')
+                          LINE_EMAIL=$(git blame -L "$i","$i" --porcelain -- "$FILE" 2>/dev/null | grep "^author-mail " | head -1 | sed 's/^author-mail //' | sed 's/[<>]//g')
+                          
                           if [ -n "$LINE_AUTHOR" ] && [ -n "$LINE_EMAIL" ]; then
-                            # Add author to our tracking
-                            if [[ -v CONTRIBUTORS_SCORE[$LINE_AUTHOR] ]]; then
-                              CONTRIBUTORS_SCORE[$LINE_AUTHOR]=$((CONTRIBUTORS_SCORE[$LINE_AUTHOR] + 1))
-                            else
-                              CONTRIBUTORS_SCORE[$LINE_AUTHOR]=1
-                              CONTRIBUTORS_EMAIL[$LINE_AUTHOR]=$LINE_EMAIL
-                            fi
-
-                            # Track which branch they modified
-                            if ! [[ ${CONTRIBUTORS_BRANCHES[$LINE_AUTHOR]} == *"develop"* ]]; then
-                              CONTRIBUTORS_BRANCHES[$LINE_AUTHOR]+="develop "
-                            fi
-
-                            # Track that this is specifically a conflicting line author
-                            CONTRIBUTORS_TYPE[$LINE_AUTHOR]="conflicting_line"
+                            CONTRIBUTORS_SCORE["$LINE_AUTHOR"]=$((CONTRIBUTORS_SCORE["$LINE_AUTHOR"] + 1))
+                            CONTRIBUTORS_EMAIL["$LINE_AUTHOR"]="$LINE_EMAIL"
+                            CONTRIBUTORS_BRANCHES["$LINE_AUTHOR"]+="develop "
+                            CONTRIBUTORS_TYPE["$LINE_AUTHOR"]="conflicting_line"
                           fi
                         done
-
-                        # Find exact authors of conflicting lines in canary branch
+                        
+                        # Find authors of conflicting lines in canary branch
                         echo "Finding authors of conflicting lines in canary branch"
                         git checkout origin/canary > /dev/null 2>&1
-
+                        
+                        # Process canary branch lines
                         for ((i=1; i<=$(echo "$CANARY_CONTENT" | wc -l); i++)); do
-                          # We need to map the line number in the temporary file back to the actual file in canary branch
-                          # This gets complicated because the file structure might be different
-                          # First, find the corresponding section in the canary branch version of the file
                           ACTUAL_LINE_CONTENT=$(echo "$CANARY_CONTENT" | sed -n "${i}p")
                           if [ -n "$ACTUAL_LINE_CONTENT" ]; then
-                            # Use the content to find the actual line in the file
-                            # Escape special characters for grep
                             ESCAPED_CONTENT=$(echo "$ACTUAL_LINE_CONTENT" | sed 's/[]\/$*.^[]/\\&/g')
                             if [ -n "$ESCAPED_CONTENT" ]; then
-                              # Find the line number in the actual file
                               CANARY_LINE_NUM=$(grep -n "$ESCAPED_CONTENT" "$FILE" 2>/dev/null | head -1 | cut -d: -f1)
-
+                              
                               if [ -n "$CANARY_LINE_NUM" ]; then
-                                LINE_AUTHOR=$(git blame -L $CANARY_LINE_NUM,$CANARY_LINE_NUM --porcelain -- "$FILE" 2>/dev/null | grep "^author " | head -1 | sed 's/^author //')
-                                LINE_EMAIL=$(git blame -L $CANARY_LINE_NUM,$CANARY_LINE_NUM --porcelain -- "$FILE" 2>/dev/null | grep "^author-mail " | head -1 | sed 's/^author-mail //' | sed 's/[<>]//g')
-
+                                LINE_AUTHOR=$(git blame -L "$CANARY_LINE_NUM","$CANARY_LINE_NUM" --porcelain -- "$FILE" 2>/dev/null | grep "^author " | head -1 | sed 's/^author //')
+                                LINE_EMAIL=$(git blame -L "$CANARY_LINE_NUM","$CANARY_LINE_NUM" --porcelain -- "$FILE" 2>/dev/null | grep "^author-mail " | head -1 | sed 's/^author-mail //' | sed 's/[<>]//g')
+                                
                                 if [ -n "$LINE_AUTHOR" ] && [ -n "$LINE_EMAIL" ]; then
-                                  # Add author to our tracking with a higher score for exact conflict line
-                                  if [[ -v CONTRIBUTORS_SCORE[$LINE_AUTHOR] ]]; then
-                                    CONTRIBUTORS_SCORE[$LINE_AUTHOR]=$((CONTRIBUTORS_SCORE[$LINE_AUTHOR] + 1))
-                                  else
-                                    CONTRIBUTORS_SCORE[$LINE_AUTHOR]=1
-                                    CONTRIBUTORS_EMAIL[$LINE_AUTHOR]=$LINE_EMAIL
-                                  fi
-
-                                  # Track which branch they modified
-                                  if ! [[ ${CONTRIBUTORS_BRANCHES[$LINE_AUTHOR]} == *"canary"* ]]; then
-                                    CONTRIBUTORS_BRANCHES[$LINE_AUTHOR]+="canary "
-                                  fi
-
-                                  # Track that this is specifically a conflicting line author
-                                  CONTRIBUTORS_TYPE[$LINE_AUTHOR]="conflicting_line"
+                                  CONTRIBUTORS_SCORE["$LINE_AUTHOR"]=$((CONTRIBUTORS_SCORE["$LINE_AUTHOR"] + 1))
+                                  CONTRIBUTORS_EMAIL["$LINE_AUTHOR"]="$LINE_EMAIL"
+                                  CONTRIBUTORS_BRANCHES["$LINE_AUTHOR"]+="canary "
+                                  CONTRIBUTORS_TYPE["$LINE_AUTHOR"]="conflicting_line"
                                 fi
                               fi
                             fi
                           fi
                         done
-
+                        
                         # Switch back to the conflict branch
-                        git checkout ${{ steps.backport-develop.outputs.branch }} > /dev/null 2>&1
+                        git checkout "${{ steps.backport-develop.outputs.branch }}" > /dev/null 2>&1
                       fi
                     fi
                   fi
                 done <<< "$CONFLICT_MARKERS"
               else
+                # Handle files without explicit conflict markers
                 echo "No explicit conflict markers found in $FILE, checking specifically changed file content"
-
-                # Get the file version from each branch
                 git checkout develop > /dev/null 2>&1
                 DEVELOP_AUTHOR=$(git log -1 --format="%an" -- "$FILE")
                 DEVELOP_EMAIL=$(git log -1 --format="%ae" -- "$FILE")
-
+                
                 git checkout origin/canary > /dev/null 2>&1
                 CANARY_AUTHOR=$(git log -1 --format="%an" -- "$FILE")
                 CANARY_EMAIL=$(git log -1 --format="%ae" -- "$FILE")
-
-                # Add the authors to our tracking
+                
                 CONTRIBUTORS_SCORE["$DEVELOP_AUTHOR"]=1
                 CONTRIBUTORS_EMAIL["$DEVELOP_AUTHOR"]="$DEVELOP_EMAIL"
                 CONTRIBUTORS_BRANCHES["$DEVELOP_AUTHOR"]="develop "
-
+                
                 if [[ "$DEVELOP_AUTHOR" == "$CANARY_AUTHOR" ]]; then
-                  # Same author in both branches
                   CONTRIBUTORS_TYPE["$DEVELOP_AUTHOR"]="high_priority"
                   CONTRIBUTORS_BRANCHES["$DEVELOP_AUTHOR"]+="canary "
                 else
-                  # Different authors
                   CONTRIBUTORS_SCORE["$CANARY_AUTHOR"]=1
                   CONTRIBUTORS_EMAIL["$CANARY_AUTHOR"]="$CANARY_EMAIL"
                   CONTRIBUTORS_BRANCHES["$CANARY_AUTHOR"]="canary "
                 fi
-
+                
                 # Switch back to the conflict branch
-                git checkout ${{ steps.backport-develop.outputs.branch }} > /dev/null 2>&1
+                git checkout "${{ steps.backport-develop.outputs.branch }}" > /dev/null 2>&1
               fi
             done
-
-            # Generate contributor list sorted by score (most impactful first)
+            
+            # Generate contributor list
             for author in "${!CONTRIBUTORS_SCORE[@]}"; do
               score=${CONTRIBUTORS_SCORE[$author]}
               email=${CONTRIBUTORS_EMAIL[$author]}
               branches=${CONTRIBUTORS_BRANCHES[$author]}
               type=${CONTRIBUTORS_TYPE[$author]:-"changed_line"}
-
-              # Convert email to GitHub username when possible
+              
+              # Convert email to GitHub username
               if [[ $email == *"@github.com"* ]]; then
                 username=$(echo "$email" | cut -d@ -f1)
                 GITHUB_HANDLE="@$username"
@@ -236,47 +200,42 @@ jobs:
                 username=$(echo "$email" | cut -d+ -f2 | cut -d@ -f1)
                 GITHUB_HANDLE="@$username"
               else
-                # Try to extract a username from the email
                 username=$(echo "$email" | cut -d@ -f1)
                 GITHUB_HANDLE="@$username"
               fi
-
-              # Mark contributors who edited conflicting lines specifically
+              
+              # Mark contributors
               if [[ "$type" == "conflicting_line" ]]; then
                 CONTRIBUTORS_INFO+="$author <$email> ($GITHUB_HANDLE) - Last edited conflicting lines in $branches - Score: $score\n"
               else
                 CONTRIBUTORS_INFO+="$author <$email> ($GITHUB_HANDLE) - Modified $branches - Score: $score\n"
               fi
             done
-
-            # Sort the contributors by score (highest first)
+            
+            # Sort contributors
             SORTED_CONTRIBUTORS=$(echo -e "$CONTRIBUTORS_INFO" | sort -t: -k3,3nr)
-
-            # Extract just the GitHub handles for the PR mention
+            
+            # Extract GitHub handles
             GITHUB_USERS=""
             while IFS= read -r line; do
               if [[ $line =~ \(@([^)]+)\) ]]; then
                 handle="@${BASH_REMATCH[1]}"
-                if [ -n "$GITHUB_USERS" ]; then
-                  GITHUB_USERS="$GITHUB_USERS $handle"
-                else
-                  GITHUB_USERS="$handle"
-                fi
+                GITHUB_USERS+=" $handle"
               fi
             done <<< "$SORTED_CONTRIBUTORS"
-
-            # Output the results
-            echo "contributor_list<<EOF" >> $GITHUB_OUTPUT
-            echo -e "$SORTED_CONTRIBUTORS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-
-            echo "github_users<<EOF" >> $GITHUB_OUTPUT
-            echo "$GITHUB_USERS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            
+            # Output results
+            echo "contributor_list<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$SORTED_CONTRIBUTORS" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            
+            echo "github_users<<EOF" >> "$GITHUB_OUTPUT"
+            echo "${GITHUB_USERS# }" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
           else
             echo "No conflict files detected"
-            echo "contributor_list=No specific contributors identified" >> $GITHUB_OUTPUT
-            echo "github_users=None" >> $GITHUB_OUTPUT
+            echo "contributor_list=No specific contributors identified" >> "$GITHUB_OUTPUT"
+            echo "github_users=None" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create PR for conflicts
@@ -289,19 +248,19 @@ jobs:
             const branch = '${{ steps.backport-develop.outputs.branch }}';
             const contributors = `${{ steps.find-contributors.outputs.contributor_list }}`;
             const githubUsers = `${{ steps.find-contributors.outputs.github_users }}`;
-
-            // Create the PR body with contributors information
+            
+            // Create PR body
             let prBody = 'This PR was automatically created to backport changes from canary to develop branch. Manual resolution of conflicts is required.\n\n';
-
+            
             if (contributors && contributors !== 'No specific contributors identified') {
               prBody += '## Potential Contributors to Contact\n\n';
               prBody += 'The following contributors have **last edited the exact conflicting lines** (sorted by relevance):\n\n';
               prBody += '```\n' + contributors + '\n```\n\n';
-
+              
               if (githubUsers && githubUsers !== 'None') {
                 prBody += '### Suggested reviewers: ' + githubUsers;
-
-                // Extract highest priority contributors (those who edited conflicting lines on both branches)
+                
+                // Extract high-priority contributors
                 const highPriorityContributors = contributors
                   .split('\n')
                   .filter(line => line.includes('conflicting lines') && line.includes('develop') && line.includes('canary'))
@@ -310,13 +269,13 @@ jobs:
                     return match ? match[1] : null;
                   })
                   .filter(Boolean);
-
+                
                 if (highPriorityContributors.length > 0) {
                   prBody += '\n\n#### High Priority: ' + highPriorityContributors.join(' ') + ' _(edited conflicting lines in both branches)_';
                 }
               }
             }
-
+            
             const result = await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -325,5 +284,5 @@ jobs:
               head: branch,
               base: 'develop'
             });
-
+            
             console.log(`PR created: ${result.data.html_url}`);
