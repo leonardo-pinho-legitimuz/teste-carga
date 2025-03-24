@@ -1,0 +1,20 @@
+name: Backport merged pull request
+on:
+  pull_request_target:
+    types: [closed]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  backport:
+    name: Backport pull request
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create backport pull requests
+        uses: korthout/backport-action@v3
+        with:
+          target_branches: "develop"
+          experimental: '{"conflict_resolution": "draft_commit_conflicts"}'
+          github_token: "${{ secrets.BOT_MERGE_TOKEN }}"
