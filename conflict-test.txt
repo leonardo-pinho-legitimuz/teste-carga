@@ -1,0 +1,4 @@
+# Common file for testing conflicts
+Line 1: This line will be edited in both branches
+Line 2: This line will remain the same
+Line 3: This line will also be edited in both branches

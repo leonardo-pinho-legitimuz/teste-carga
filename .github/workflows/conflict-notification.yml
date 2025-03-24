@@ -1,0 +1,114 @@
+name: Notify on Backport Conflicts
+on:
+  pull_request:
+    types: [opened]
+    branches:
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-for-conflict-comments:
+    runs-on: ubuntu-latest
+    # Only run on PRs created by the backport action
+    if: contains(github.event.pull_request.title, 'Backport') && github.event.pull_request.draft == true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find conflict markers and notify authors
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.BOT_MERGE_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+
+            // Get the PR body
+            const prBody = pr.body;
+
+            // Check if this is a backport PR with conflicts
+            if (pr.draft && prBody.includes('Conflicts Detected')) {
+              console.log('This appears to be a backport PR with conflicts');
+
+              // Get the PR files
+              const files = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number
+              });
+
+              // Get the PR diff to look for conflict markers
+              let conflictInfo = '';
+              let mentionedAuthors = new Set();
+
+              for (const file of files.data) {
+                // Get the file content
+                const fileContent = await github.rest.repos.getContent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  path: file.filename,
+                  ref: pr.head.ref
+                });
+
+                const content = Buffer.from(fileContent.data.content, 'base64').toString();
+
+                // Check for conflict markers
+                if (content.includes('<<<<<<<') || content.includes('=======') || content.includes('>>>>>>>')) {
+                  console.log(`Found conflict markers in ${file.filename}`);
+
+                  // Add to conflict info
+                  conflictInfo += `\n- \`${file.filename}\` has conflict markers\n`;
+
+                  // Get the git blame for the file to find who should be mentioned
+                  // This is simplified and just uses the PR author as a fallback
+                  try {
+                    // Try to extract authors from PR body if they were mentioned
+                    const reviewerSection = prBody.match(/## People to Review\s+([\s\S]*?)(?:\n#|$)/);
+                    if (reviewerSection && reviewerSection[1]) {
+                      const mentionedUsers = reviewerSection[1].match(/@\w+/g);
+                      if (mentionedUsers) {
+                        mentionedUsers.forEach(user => {
+                          mentionedAuthors.add(user);
+                        });
+                      }
+                    }
+                  } catch (e) {
+                    console.error('Error parsing reviewers:', e);
+                  }
+                }
+              }
+
+              // If no authors were found from blame, mention the PR author
+              if (mentionedAuthors.size === 0) {
+                mentionedAuthors.add(`@${pr.user.login}`);
+              }
+
+              // Create the comment with mentions
+              if (conflictInfo) {
+                const authorMentions = Array.from(mentionedAuthors).join(' ');
+                const comment = `# Backport Conflicts Need Resolution
+
+${authorMentions} - This backport PR has conflicts that need to be resolved manually:
+
+${conflictInfo}
+
+Please resolve these conflicts and mark the PR as ready for review when done.`;
+
+                // Post the comment
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: comment
+                });
+
+                // Add conflict label
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  labels: ['has-conflicts']
+                });
+              }
+            }
