@@ -1,0 +1,105 @@
+name: Auto Backport Canary to Develop
+on:
+  pull_request_target:
+    types: [closed]
+    branches:
+      - canary
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to backport'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  add-backport-label:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
+    steps:
+      - name: Add backport label
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.BOT_MERGE_TOKEN }}
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['backport develop']
+            })
+
+  backport:
+    runs-on: ubuntu-latest
+    needs: add-backport-label
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create backport PR
+        uses: korthout/backport-action@v3
+        with:
+          # Target branch is develop
+          target_branches: develop
+          # Add custom labels to the backport PR
+          add_labels: 'backport,automated'
+          # Customize PR title and description
+          pull_title: '[Backport to develop] ${pull_title}'
+          pull_description: |
+            # Automated Backport
+
+            This PR automatically backports changes from PR #${pull_number} in the canary branch to the develop branch.
+
+            Original PR by @${pull_author}
+
+            ## Original Description
+            ${pull_description}
+          # Use GitHub token for authentication
+          github_token: ${{ secrets.BOT_MERGE_TOKEN }}
+          # Custom settings for handling conflicts
+          experimental: >
+            {
+              "conflict_resolution": "draft_commit_conflicts"
+            }
+
+  # Allow manual backporting of specific PRs
+  manual-backport:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create backport PR
+        uses: korthout/backport-action@v3
+        with:
+          # Use the PR number from workflow_dispatch input
+          source_pr_number: ${{ github.event.inputs.pr_number }}
+          # Target branch is develop
+          target_branches: develop
+          # Add custom labels
+          add_labels: 'backport,automated,manual-trigger'
+          # Custom PR title and description
+          pull_title: '[Manual Backport to develop] ${pull_title}'
+          pull_description: |
+            # Manual Backport
+
+            This PR was manually triggered to backport PR #${pull_number} from canary to develop.
+
+            Original PR by @${pull_author}
+
+            ## Original Description
+            ${pull_description}
+          # Use GitHub token for authentication
+          github_token: ${{ secrets.BOT_MERGE_TOKEN }}
+          # Handle conflicts by creating a draft PR
+          experimental: >
+            {
+              "conflict_resolution": "draft_commit_conflicts"
+            }
