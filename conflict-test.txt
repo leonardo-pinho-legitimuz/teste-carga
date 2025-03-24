@@ -1,4 +1,5 @@
 # Common file for testing conflicts
-Line 1: This line will be edited in both branches
+Line 1: This line was edited in canary branch by Leonardo Pinho
 Line 2: This line will remain the same
-Line 3: This line will also be edited in both branches
+Line 3: Canary branch edit by Leonardo Pinho
+Line 4: Added in canary branch
