@@ -5,15 +5,9 @@ on:
     branches:
       - canary
 
-# This ensures this workflow won't interfere with other CI steps
 concurrency:
   group: canary-to-develop-backport-${{ github.ref }}
   cancel-in-progress: false
-
-# Set workflow permissions
-permissions:
-  contents: write
-  pull-requests: write
 
 jobs:
   backport:
@@ -32,8 +26,7 @@ jobs:
         run: |
           git config --global user.name "GitHub Backport Bot"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          # Use the token directly in the push URL
-          git remote set-url origin https://${{ secrets.BOT_MERGE_TOKEN }}@github.com/${{ github.repository }}.git
+          git config --global url."https://${{ secrets.BOT_MERGE_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Backport to develop branch
         id: backport-develop
