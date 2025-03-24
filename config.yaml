@@ -1,12 +1,10 @@
-# Configuration File for Development (Updated)
+# Configuration File for Development
 server:
-  port: 4000
-  host: 0.0.0.0
-  timeout: 10000
-  debug: true
+  port: 3000
+  host: localhost
+  timeout: 5000
 database:
   host: develop-db.example.com
-  user: develop_admin
-  password: secure_develop_pass
-  max_connections: 50
-  debug_queries: true
+  user: develop_user
+  password: develop_password123
+  max_connections: 20
