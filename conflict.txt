@@ -1,1 +1,1 @@
-Conflict line
+Different conflict line
