@@ -1,0 +1,10 @@
+# Configuration File for Development
+server:
+  port: 3000
+  host: localhost
+  timeout: 5000
+database:
+  host: develop-db.example.com
+  user: develop_user
+  password: develop_password123
+  max_connections: 20
