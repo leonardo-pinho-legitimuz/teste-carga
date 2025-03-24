@@ -1,0 +1,5 @@
+# Server log file
+2025-03-24 12:00:00 [DEBUG] Server starting with extended logging
+2025-03-24 12:00:05 [DEBUG] Loading configuration
+2025-03-24 12:01:00 [INFO] Database connection established
+2025-03-24 12:02:00 [DEBUG] Cache bypassed - using direct DB access

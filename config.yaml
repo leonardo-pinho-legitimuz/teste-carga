@@ -1,0 +1,6 @@
+# Configuration file for canary branch
+log_level: debug
+cache_enabled: false
+max_connections: 200
+timeout_seconds: 15
+feature_flags_enabled: true
